@@ -1,0 +1,95 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+
+/* Page background */
+body {
+  font-family: Arial, sans-serif;
+  background: #f1f5f9;
+  margin: 0;
+  padding: 0;
+}
+
+/* Center page vertically + horizontally */
+.wrapper {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Main container */
+.container {
+  width: 500px;
+  background: white;
+  padding: 30px;
+  border-radius: 12px;
+  border: 2px solid #e2e8f0;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+}
+
+/* Page title */
+.title {
+  text-align: center;
+  font-size: 26px;
+  margin-bottom: 20px;
+}
+
+/* Task card */
+.card {
+  border: 1px solid #cbd5e1;
+  padding: 12px;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  background: #f8fafc;
+}
+
+/* Input fields */
+.input {
+  width: 100%;
+  padding: 10px;
+  margin-bottom: 12px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  font-size: 14px;
+}
+
+/* Button */
+.button {
+  width: 100%;
+  padding: 10px;
+  background: #cbd5e1;
+  color: white;
+  border-radius: 6px;
+  border: none;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.button:hover {
+  background: #cbd5e1;
+}
