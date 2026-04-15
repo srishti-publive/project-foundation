@@ -57,7 +57,7 @@ publive_mcp/
 ├── .gitignore                # .env, __pycache__, *.pyc, db.sqlite3
 ├── requirements.txt          # Unpinned Python dependencies
 ├── manage.py
-├── seed.py                   # Utility to bulk-seed tasks
+├── seed.py                   # Utility to bulk-seed tasks — currently a no-op (see §21)
 ├── docker-compose.yml        # postgres:15 + web (Django runserver for dev)
 ├── dockerfile                # Python 3.11; CMD gunicorn (lowercase filename — see §13)
 │
@@ -86,7 +86,7 @@ publive_mcp/
 │   ├── queue.py              # get_next_task(), claim_task() — no HTTP route for claim
 │   ├── admin.py              # Task registered in Django admin
 │   ├── management/commands/
-│   │   └── run-scheduled.py  # manage.py run_scheduled (dispatches due scheduled tasks)
+│   │   └── run-scheduled.py  # Dispatches due scheduled tasks — **unregistered** due to hyphen in filename (see §9, §21)
 │   ├── tests.py              # Empty placeholder — no tests yet
 │   └── migrations/
 │       ├── 0001_initial.py
@@ -221,13 +221,15 @@ Base path: **`/api/`**. No authentication on these routes.
 There is a Django management command at `api/management/commands/run-scheduled.py`:
 
 - **What it does:** Finds tasks where `status='pending'` and `scheduled_at <= now()` and bulk-updates them to `status='running'` with `started_at=now()`.
-- **Run (Compose):**
+- **Intended invocation:**
 
 ```bash
 docker compose exec web python manage.py run_scheduled
 ```
 
-For periodic dispatch, trigger from cron as described in `.claude/commands/run-scheduled.md`.
+> ⚠️ **Bug — command is currently unregistered.** The file is named `run-scheduled.py` with a **hyphen**, so `pkgutil.iter_modules` (used internally by Django's `find_commands`) skips it and Django never sees the command. `manage.py run_scheduled` (or any hyphenated variant) therefore fails with `Unknown command`. **Fix:** rename the file to `run_scheduled.py` (underscore). The class inside is already `Command`, so no other changes are needed.
+
+For periodic dispatch, once the filename is fixed, trigger from cron as described in `.claude/commands/run-scheduled.md`.
 
 ---
 
@@ -359,6 +361,10 @@ docker compose logs web --tail=50
 
 It expects the Django API to be running at `http://localhost:8000/api`. The `mcp` and `httpx` packages it requires are **not** in `requirements.txt` — install them separately.
 
+> ⚠️ **Bug — stale empty-queue detection.** The `next_task` handler still checks `r.status_code == 200` to decide whether there are tasks available. The backend was updated to return `200 OK` with `{"detail": "No claimable tasks.", "task": null}` when the queue is empty (see §6), so the MCP tool now forwards that sentinel body as if it were a real task. The handler should check for `body.get("task") is None` (or the presence of `detail`) before returning.
+
+> ⚠️ **Bug — `list_tools` payload shape.** The handler returns plain dicts (`{"name": ..., "description": ...}`) with no `inputSchema`. Newer versions of the `mcp` SDK expect `Tool` objects with an `inputSchema`; older versions silently accept the dicts. If you upgrade the SDK and see validation errors, add `inputSchema` entries.
+
 **`.mcp.json` / `.mcp.json.example`** — MCP client configuration files for common servers (postgres, filesystem, fetch, git, rest-api, postman). The committed `.mcp.json` currently contains a real API key (see §15).
 
 ---
@@ -423,6 +429,17 @@ If you want agent-driven runtime behavior (e.g. a worker atomically claiming tas
 - **`update_task_status` no longer overwrites `started_at`** on repeat transitions into `running` — it only sets the timestamp if it is currently `null`, so re-entering `running` doesn't reset the clock.
 - **Frontend `lib/api.js` rewritten**: API base URL is now read from `NEXT_PUBLIC_API_URL` (falls back to `http://localhost:8000/api`), all calls go through a shared `request()` helper that throws an `Error` (with `.status` and `.body`) on non-2xx or network failures, and new helpers `claimTask`, `getNextTask`, and `getScheduledTasks` are exported.
 
+### Active bugs still in the tree
+
+These are real defects that surface when you run the code as-is:
+
+- 🐞 **`run-scheduled.py` is invisible to Django.** The file in `api/management/commands/` uses a hyphen in its name. Django's command discovery (`pkgutil.iter_modules`) skips any file whose stem is not a valid Python identifier, so `manage.py run_scheduled` / `manage.py run-scheduled` both fail with `Unknown command`. **Fix:** rename the file to `run_scheduled.py`.
+- 🐞 **`seed.py` does nothing when run.** It defines `seed(tasks)` but has no `if __name__ == "__main__"` block, no list of sample tasks, and no call to `seed(...)`. Running `python seed.py` exits silently without seeding anything. It also imports `requests`, which is **not** in `requirements.txt`. **Fix:** add a sample `tasks = [...]` list, call `seed(tasks)` under an `__main__` guard, and add `requests` to `requirements.txt` (or rewrite it to use `django.test.Client` / Django ORM directly).
+- 🐞 **MCP `next_task` no longer detects an empty queue.** `mcp_server/server.py` still relies on `r.status_code == 200` to decide "no tasks", but `GET /api/tasks/next/` now always returns `200` (with `{"task": null}` when empty). The MCP tool will therefore forward the sentinel body as a task. **Fix:** check `body.get("task") is None` or the presence of `detail`.
+- 🐞 **MCP `list_tools` missing `inputSchema`.** See §16. Breaks under newer `mcp` SDK versions.
+- 🐞 **`update_task_status` can re-stamp `completed_at` on retries.** If a task is flipped from `failed` back to `completed` (or vice versa), `completed_at = now()` is written again, clobbering the original timestamp. Analogous to the `started_at` guard that *was* added for `running`. Consider mirroring that guard: only set `completed_at` if it is currently `null`, or allow overwrite deliberately based on product rules.
+- 🐞 **`CLAUDE.md` "Known Issues" section is stale.** It still lists "`claim_task()` has no HTTP route" and "`completed_at` / `started_at` are never set" — both have been fixed in the code. Update or remove those bullets.
+
 ### Remaining TODOs (not in scope for this fix)
 
 - **No pagination on `/tasks`** — the frontend still loads all tasks in a single fetch. Add server-side pagination before the table grows.
@@ -432,8 +449,10 @@ If you want agent-driven runtime behavior (e.g. a worker atomically claiming tas
 - **Requirements are unpinned** — add explicit version constraints in `requirements.txt` before any production build.
 - **Lowercase `dockerfile`** — rename to `Dockerfile` or set `dockerfile: dockerfile` explicitly in `docker-compose.yml` for tooling that is case-sensitive.
 - **No tests** — `api/tests.py` is empty; there is no frontend test suite. Add unit tests for `api/queue.py` (priority ordering, scheduled filtering, atomic claim) and integration tests for the views.
-- **Open CORS + empty `ALLOWED_HOSTS`** — lock both down before any real deployment.
+- **Open CORS + empty `ALLOWED_HOSTS`** — lock both down before any real deployment. Note that with `DJANGO_DEBUG=False` and `ALLOWED_HOSTS = []`, Django will reject **every** request — the app is effectively unserveable in production until this is fixed.
 - **Secret in `.mcp.json`** — rotate the committed Postman API key and move secrets to `.env`.
+- **Missing `api/migrations/0001_initial.py` header vs. settings mismatch** — initial migration was generated on Django 5.2.12 while `config/settings.py` targets Django 6.0. Regenerate migrations against the target Django version if you hit compatibility warnings.
+- **`api/Untitled`** — there is a stray `Untitled` entry under `api/` (visible in `ls`). Remove or rename if it isn't intentional.
 
 ---
 
