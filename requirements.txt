@@ -4,3 +4,5 @@ gunicorn
 psycopg2-binary
 django-environ
 django-cors-headers
+httpx
+mcp
