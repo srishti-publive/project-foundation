@@ -5,16 +5,18 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from .models import Task
-from .queue import get_next_task
+from .queue import claim_task, get_next_task
 from .serializers import TaskSerializer
+
 
 # GET all tasks
 @api_view(["GET"])
 def get_tasks(request):
-    status = request.query_params.get("status")
+    # Renamed from `status` to avoid shadowing `rest_framework.status`.
+    status_filter = request.query_params.get("status")
 
-    if status:
-        tasks = Task.objects.filter(status=status)
+    if status_filter:
+        tasks = Task.objects.filter(status=status_filter)
     else:
         tasks = Task.objects.all()
 
@@ -29,10 +31,10 @@ def create_task(request):
 
     if serializer.is_valid():
         serializer.save()
-        return Response(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    return Response(serializer.errors)
-
+    # Bug fix: validation errors must return 400, not the default 200.
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(["PATCH"])
@@ -45,10 +47,9 @@ def update_task_status(request, task_id):
         return Response({"error": "Invalid status"}, status=status.HTTP_400_BAD_REQUEST)
 
     task.status = new_status
-    from django.utils import timezone
-    if new_status == 'running':
+    if new_status == "running" and task.started_at is None:
         task.started_at = timezone.now()
-    elif new_status in ('completed', 'failed'):
+    elif new_status in ("completed", "failed"):
         task.completed_at = timezone.now()
     task.save()
 
@@ -66,7 +67,26 @@ def next_task(request):
     """
     task = get_next_task()
     if task is None:
-        return Response({"detail": "No claimable tasks."}, status=status.HTTP_204_NO_CONTENT)
+        # Return 200 with an explicit null body; 204 with a body is unreliable
+        # because many HTTP clients discard bodies on 204 responses.
+        return Response({"detail": "No claimable tasks.", "task": None})
+    return Response(TaskSerializer(task).data)
+
+
+@api_view(["POST"])
+def claim_next_task(request, task_id):
+    """
+    Atomically claim a pending task (pending → running) using SELECT FOR UPDATE.
+
+    Returns 200 with the serialized task on success, or 409 if the task is no
+    longer claimable (already claimed, completed, or does not exist).
+    """
+    task = claim_task(task_id)
+    if task is None:
+        return Response(
+            {"error": "Task is not claimable (already claimed, completed, or missing)."},
+            status=status.HTTP_409_CONFLICT,
+        )
     return Response(TaskSerializer(task).data)
 
 

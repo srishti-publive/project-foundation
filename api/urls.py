@@ -2,6 +2,7 @@ from django.urls import path
 
 from .views import (
     bulk_create_tasks,
+    claim_next_task,
     create_task,
     get_tasks,
     next_task,
@@ -21,4 +22,5 @@ urlpatterns = [
 
     # Single-task actions
     path("tasks/<int:task_id>/status/", update_task_status),
+    path("tasks/<int:task_id>/claim/", claim_next_task),
 ]

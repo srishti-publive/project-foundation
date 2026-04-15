@@ -5,17 +5,17 @@
 ![Next.js](https://img.shields.io/badge/Next.js-16.2.2-black)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-336791)
 
-Monorepo with a **Django REST Framework** API on **PostgreSQL**, a **Next.js (App Router)** UI for **Task** records, and **Docker Compose** for API + database. In addition, there’s a small **MCP stdio server** (`mcp_server/server.py`) that exposes the task API as MCP tools (via HTTP calls to the Django API).
+Monorepo with a **Django REST Framework** API on **PostgreSQL**, a **Next.js (App Router)** UI for **Task** records, and **Docker Compose** for API + database. A small **MCP stdio server** (`mcp_server/server.py`) exposes the task API as MCP tools via HTTP calls to the Django backend.
 
 ---
 
 ## 1. Project overview
 
-**What it does:** The backend exposes JSON under `/api/` for creating tasks (single or bulk), listing them with optional `status` filter, patching `status`, and peeking at the **next runnable pending task** or **future-scheduled** pending tasks. Tasks support **priority** (low / medium / high) and optional **scheduled_at**; **started_at** and **completed_at** exist on the model but are **not** set by the status PATCH view (only `claim_task()` in `api/queue.py` sets `started_at` when used).
+**What it does:** The backend exposes JSON under `/api/` for creating tasks (single or bulk), listing them with an optional `status` filter, patching `status`, and peeking at the **next runnable pending task** or **future-scheduled** pending tasks. Tasks support **priority** (`low` / `medium` / `high`) and an optional `scheduled_at`; `started_at` and `completed_at` are set automatically by the `PATCH /status/` view when a task transitions to `running` or `completed`/`failed` respectively.
 
-**Problem it solves:** Centralized persistence and HTTP workflows for named jobs (`tool_name`, `user_id`) with lifecycle `pending` → `running` → `completed` | `failed`, ordered dispatch for workers, and deferred execution via `scheduled_at`.
+**Problem it solves:** Centralized persistence and HTTP workflows for named jobs (`tool_name`, `user_id`) with lifecycle `pending → running → completed | failed`, priority-based dispatch for workers, and deferred execution via `scheduled_at`.
 
-**Who it’s for:** Developers who want a small full-stack example or internal tool: PostgreSQL-backed tasks, a minimal UI, and endpoints shaped for an external worker process.
+**Who it's for:** Developers who want a small full-stack example or internal tool — PostgreSQL-backed tasks, a minimal UI, and endpoints shaped for an external worker process.
 
 ---
 
@@ -36,13 +36,13 @@ Values are taken from `requirements.txt`, `frontend/package.json`, `dockerfile`,
 | Frontend | Next.js | 16.2.2 |
 | Frontend | React / react-dom | 19.2.4 |
 | Styling | Tailwind CSS | `^4` with `@tailwindcss/postcss` |
-| Language (frontend) | TypeScript | tooling; **mixed** `.tsx` / `.js` under `app/` |
+| Language (frontend) | TypeScript | tooling only; **mixed** `.tsx` / `.js` under `app/` |
 | Lint | ESLint | `^9`, `eslint-config-next` 16.2.2 |
 | Containers | Docker Compose | `docker-compose.yml`, build context `.` |
 
-**Migration note:** `api/migrations/0001_initial.py` was generated with **Django 5.2.12** (header); `config/settings.py` targets **Django 6.0** docs. Reconcile versions in your environment if you see migration or runtime warnings.
+**Migration note:** `api/migrations/0001_initial.py` was generated with **Django 5.2.12** (file header); `config/settings.py` targets **Django 6.0** docs. Reconcile versions in your environment if you see migration or runtime warnings.
 
-**MCP note:** `mcp_server/server.py` uses the Python `mcp` SDK + `httpx` (async). These dependencies are not listed in `requirements.txt` in this repo; install them separately if you want to run the MCP server.
+**MCP note:** `mcp_server/server.py` uses the Python `mcp` SDK + `httpx` (async). These are **not** in `requirements.txt` — install them separately if you want to run the MCP server.
 
 ---
 
@@ -50,23 +50,27 @@ Values are taken from `requirements.txt`, `frontend/package.json`, `dockerfile`,
 
 ```
 publive_mcp/
-├── .mcp.json                 # MCP server configs (see §16) — contains secrets in this repo, rotate/remove
+├── .mcp.json                 # MCP server configs (see §16) — contains secrets, rotate immediately
 ├── .mcp.json.example         # Template MCP config
-├── readme.md                 # This file
+├── README.md                 # This file
 ├── CLAUDE.md                 # Agent-oriented project notes (commands, architecture)
 ├── .gitignore                # .env, __pycache__, *.pyc, db.sqlite3
-├── requirements.txt
+├── requirements.txt          # Unpinned Python dependencies
 ├── manage.py
-├── docker-compose.yml        # postgres + web (Django runserver)
-├── dockerfile                # Python 3.11; CMD gunicorn (lowercase filename)
+├── seed.py                   # Utility to bulk-seed tasks
+├── docker-compose.yml        # postgres:15 + web (Django runserver for dev)
+├── dockerfile                # Python 3.11; CMD gunicorn (lowercase filename — see §13)
 │
 ├── mcp_server/
-│   └── server.py             # MCP stdio server for task API
+│   └── server.py             # MCP stdio server exposing 4 task tools
 │
 ├── .claude/                  # Claude Code project helpers (see §18)
 │   ├── context/              # api-schema.md, db-schema.md (may lag code)
-│   ├── commands/             # migrate.md, logs.md, test-api.md
-│   └── prompts/              # add-endpoints.md
+│   ├── commands/             # migrate.md, logs.md, test-api.md, seed-tasks.md, etc.
+│   ├── prompts/              # add-endpoints.md, new-feature.md, debug-task-flow.md
+│   ├── skills/               # bulk-import-skill.md, task-worker-skill.md
+│   ├── MCP-config.json       # Example MCP server definitions
+│   └── settings.local.json   # Local Claude toggles (disables MCP servers for dev)
 │
 ├── config/
 │   ├── settings.py           # PostgreSQL, CORS, INSTALLED_APPS, env vars
@@ -75,15 +79,15 @@ publive_mcp/
 │   └── asgi.py
 │
 ├── api/
-│   ├── models.py             # Task (priority, scheduling, status, timestamps)
-│   ├── serializers.py      # TaskSerializer — all fields
-│   ├── views.py              # CRUD-ish + bulk_create, next_task, scheduled_tasks
-│   ├── urls.py # Routes under /api/
-│   ├── queue.py              # get_next_task(), claim_task() (no HTTP route for claim)
-│   ├── admin.py
+│   ├── models.py             # Task model (11 fields — priority, scheduling, timestamps)
+│   ├── serializers.py        # TaskSerializer — all fields
+│   ├── views.py              # 6 function-based API views
+│   ├── urls.py               # Routes under /api/
+│   ├── queue.py              # get_next_task(), claim_task() — no HTTP route for claim
+│   ├── admin.py              # Task registered in Django admin
 │   ├── management/commands/
-│   │   └── run-scheduled.py  # manage.py run_scheduled (dispatch due scheduled tasks)
-│   ├── tests.py              # Empty placeholder
+│   │   └── run-scheduled.py  # manage.py run_scheduled (dispatches due scheduled tasks)
+│   ├── tests.py              # Empty placeholder — no tests yet
 │   └── migrations/
 │       ├── 0001_initial.py
 │       ├── 0002_task_input_data_task_output_data_task_status.py
@@ -92,15 +96,16 @@ publive_mcp/
 ├── frontend/
 │   ├── package.json
 │   ├── next.config.ts, tsconfig.json, eslint.config.mjs, postcss.config.mjs
-│   ├── AGENTS.md, CLAUDE.md  # Next.js agent notes
-│   ├── README.md             # create-next-app default
+│   ├── CLAUDE.md             # Frontend agent notes
+│   ├── README.md             # create-next-app default (not project docs)
 │   ├── app/
-│   │   ├── layout.tsx, page.tsx   # Root: stock Next landing (Tailwind)
-│   │   ├── globals.css       # Shared styles for /tasks, /create
-│   │   ├── tasks/page.js     # List, status filter, priority filter, sort
-│   │   └── create/page.js    # Create with priority + optional scheduled_at
+│   │   ├── layout.tsx        # Root layout with Geist Sans/Mono fonts
+│   │   ├── page.tsx          # Stock Next.js template — not linked to tasks
+│   │   ├── globals.css       # Custom styles for /tasks and /create (~244 lines)
+│   │   ├── tasks/page.js     # Task list: status filter, priority filter, sort, actions
+│   │   └── create/page.js    # Task creation form: name, tool, priority, scheduled_at
 │   ├── lib/api.js            # getTasks, createTask, updateTaskStatus
-│   └── public/
+│   └── public/               # Icons and logos
 │
 └── Images/                   # Screenshots (API/UI)
 ```
@@ -109,18 +114,18 @@ publive_mcp/
 
 ## 4. Architecture
 
-**Style:** Single Django project + app `api`, separate Next.js client (not microservices).
+**Style:** Single Django project + `api` app, separate Next.js client (not microservices).
 
 **Request flow:**
 
-1. Browser loads `/tasks` or `/create` (or stock `/` from `app/page.tsx`).
-2. Client `fetch` in `frontend/lib/api.js` → `http://localhost:8000/api/...`.
+1. Browser loads `/tasks` or `/create` (stock `/` comes from `app/page.tsx`, not linked to tasks).
+2. Client `fetch` calls in `frontend/lib/api.js` → `http://localhost:8000/api/...`.
 3. `config/urls.py` → `api/urls.py` → `@api_view` handlers in `api/views.py`.
-4. `TaskSerializer` ↔ `Task`; PostgreSQL via `DATABASES` in `config/settings.py`.
+4. `TaskSerializer` ↔ `Task` model; PostgreSQL via `DATABASES` in `config/settings.py`.
 
-**Patterns:** DRF function views, model serializer, ORM in views, **open CORS** (`CORS_ALLOW_ALL_ORIGINS = True`). **No** DRF authentication or permission classes on task endpoints.
+**Patterns:** DRF function-based views, model serializer, ORM only (no raw SQL), **open CORS** (`CORS_ALLOW_ALL_ORIGINS = True`). **No** DRF authentication or permission classes on task endpoints.
 
-**Queue logic:** `api/queue.py` centralizes “who runs next”: `get_next_task()` is used by `GET /api/tasks/next/`. `claim_task(task_id)` performs `SELECT FOR UPDATE` and moves **pending → running** with `started_at` set; it is **not** exposed as its own URL (workers today must rely on `PATCH .../status/` for transitions or you add a `/claim/` route).
+**Queue logic:** `api/queue.py` centralizes dispatch. `get_next_task()` is used by `GET /api/tasks/next/`. `claim_task(task_id)` performs `SELECT FOR UPDATE` and transitions **pending → running** with `started_at` set — but has **no HTTP route** (see §8 and §21).
 
 **Priority ordering (`get_next_task`):** high → medium → low (ranks 1–3 via `Case`/`When`); ties broken by `created_at` ascending. Only **pending** tasks with `scheduled_at` null or **≤ now** are eligible.
 
@@ -142,8 +147,8 @@ Defined in `api/models.py`:
 | `priority` | `CharField(10)` | `low` \| `medium` \| `high`; default `medium` |
 | `created_at` | `DateTimeField` | `auto_now_add` |
 | `scheduled_at` | `DateTimeField` | optional; future values excluded from `get_next_task` |
-| `started_at` | `DateTimeField` | optional; set by `claim_task()` when claiming |
-| `completed_at` | `DateTimeField` | optional; **not** set by current views |
+| `started_at` | `DateTimeField` | optional; set to `now()` by `PATCH /status/` when transitioning to `running`, and also by `claim_task()` |
+| `completed_at` | `DateTimeField` | optional; set to `now()` by `PATCH /status/` when transitioning to `completed` or `failed` |
 
 ---
 
@@ -153,24 +158,31 @@ Base path: **`/api/`**. No authentication on these routes.
 
 ### `GET /api/tasks/`
 
-- **Query:** optional `status` — one of `pending`, `running`, `completed`, `failed`.
+- **Query:** optional `?status=` — one of `pending`, `running`, `completed`, `failed`.
 - **Response:** `200` JSON array of tasks (all serializer fields).
 
 ### `POST /api/tasks/create/`
 
-- **Body:** JSON; any subset of model fields accepted by `TaskSerializer` (defaults apply: e.g. `status` → `pending`, `priority` → `medium`).
-- **Success:** `200` with serialized task (default DRF status for `Response(serializer.data)`).
-- **Errors:** `400` with `serializer.errors`.
+- **Body:** JSON; any subset of model fields accepted by `TaskSerializer` (defaults apply — e.g. `status` → `pending`, `priority` → `medium`).
+- **Success:** `201 Created` with serialized task.
+- **Errors:** `400 Bad Request` with `serializer.errors`.
 
 ### `POST /api/tasks/bulk-create/`
 
 - **Body:** JSON **array** of task objects (non-empty).
-- **Behavior:** Validates **every** item first; **all-or-nothing** — any invalid item yields `400` with a map of index → errors. On success, `bulk_create` and return `201` with array of tasks.
+- **Behavior:** Validates **every** item first; **all-or-nothing** — any invalid item yields `400` with a map of `index → errors`. On success, inserts via `bulk_create` and returns `201` with an array of tasks.
 
 ### `GET /api/tasks/next/`
 
-- **Response:** Next claimable pending task (same rules as `get_next_task()`), serialized JSON.
-- **Empty queue:** `204 No Content` with body `{"detail": "No claimable tasks."}` (clients should treat **204** as empty; some HTTP clients ignore bodies on 204).
+- **Response:** `200 OK`. On success, the body is the serialized task. When the queue is empty, the body is `{"detail": "No claimable tasks.", "task": null}`.
+- **Note:** This endpoint only *peeks* — it does **not** claim or change the task's status. Use `POST /api/tasks/<id>/claim/` to atomically claim it.
+
+### `POST /api/tasks/<task_id>/claim/`
+
+- **Purpose:** Atomically transition a task from `pending → running` using `SELECT FOR UPDATE`. Safe for concurrent workers — only one caller wins.
+- **Body:** none.
+- **Success:** `200` with the serialized task; `started_at` is set to `now()`.
+- **Conflict:** `409` `{"error": "Task is not claimable (already claimed, completed, or missing)."}`.
 
 ### `GET /api/tasks/scheduled/`
 
@@ -180,26 +192,27 @@ Base path: **`/api/`**. No authentication on these routes.
 
 - **Body:** `{"status": "<pending|running|completed|failed>"}`.
 - **Invalid status:** `400` `{"error": "Invalid status"}`.
-- **Missing id:** `404`.
-- **Success:** `200` serialized task. **Note:** This view only updates `status` (and `save()` full row); it does **not** maintain `started_at` / `completed_at`.
+- **Not found:** `404`.
+- **Success:** `200` serialized task.
+- **Timestamps:** transitioning to `running` sets `started_at = now()`; transitioning to `completed` or `failed` sets `completed_at = now()`.
 
 ---
 
 ## 7. Frontend
 
-- **Routes:** `/create` (client form), `/tasks` (client list). **`/`** is the default Next.js template (`app/page.tsx`) and is **not** linked to tasks.
-- **`lib/api.js`:** `API_URL = "http://localhost:8000/api"` — `getTasks(status?)`, `createTask(body)`, `updateTaskStatus(id, status)`. No centralized error handling.
-- **`/create`:** Sends `name`, `tool_name`, `user_id`, `priority`, and optional `scheduled_at` (ISO-like string from `datetime-local`; ensure timezone expectations match the API’s `USE_TZ = True` / UTC).
-- **`/tasks`:** Status filter refetches from API (`?status=`). **Priority** filter and **sort** (by priority or `created_at`) are **client-side** on the current fetch. No pagination.
-- **Styling:** Task/create pages use classes from `globals.css`. Tailwind is installed; root `page.tsx` uses Tailwind utilities. `.card.running` / `.card.completed` / `.card.failed` in `globals.css` are **not** applied — cards use `className="card"` only; status is shown via inner `.status.*` spans.
+- **Routes:** `/create` (task creation form), `/tasks` (task list). **`/`** is the default Next.js template (`app/page.tsx`) and is **not** linked to tasks.
+- **`lib/api.js`:** `API_URL` is read from `process.env.NEXT_PUBLIC_API_URL` and falls back to `http://localhost:8000/api`. Exports `getTasks(status?)`, `createTask(body)`, `updateTaskStatus(id, status)`, `claimTask(id)`, `getNextTask()`, and `getScheduledTasks()`. All calls go through a shared `request()` wrapper that throws an `Error` (with `.status` and `.body`) on non-2xx responses and on network failures.
+- **`/create`:** Sends `name`, `tool_name`, `user_id`, `priority`, and optional `scheduled_at` (ISO string from a `datetime-local` input; ensure timezone expectations match the API's `USE_TZ = True` / UTC setting).
+- **`/tasks`:** Status filter triggers a fresh API fetch (`?status=`). Priority filter and sort (by priority or `created_at`) are **client-side** on the current result set. No pagination — every load fetches all tasks.
+- **Styling:** Task and create pages use named classes from `globals.css`. Tailwind v4 is installed; the root `page.tsx` uses Tailwind utilities, but task/create pages exclusively use custom CSS classes. The `.card.running`, `.card.completed`, and `.card.failed` rules in `globals.css` are **dead code** — task cards only ever receive `className="card"`, never a status variant. Status is shown through inner `.status.*` span elements instead.
 
 ---
 
 ## 8. Worker integration notes
 
-- **Peek next work:** `GET /api/tasks/next/` (does **not** claim or change status).
-- **Atomic claim:** `claim_task(task_id)` in `api/queue.py` is ready for use but has **no** dedicated HTTP endpoint; add e.g. `POST /api/tasks/<id>/claim/` if external workers need DB-level locking without racing on PATCH.
-- **Complete / fail:** Today, `PATCH /api/tasks/<id>/status/` is the simple path; consider setting `completed_at` in the view or a dedicated complete endpoint if you need accurate timestamps.
+- **Peek next work:** `GET /api/tasks/next/` — does **not** claim or mutate the task.
+- **Atomic claim:** `POST /api/tasks/<id>/claim/` → calls `claim_task()` which uses `SELECT FOR UPDATE` to safely transition `pending → running` and set `started_at`. Returns `409` if another worker already claimed the task. This is the endpoint concurrent workers should use.
+- **Complete / fail:** Use `PATCH /api/tasks/<id>/status/`. The view sets `completed_at` automatically.
 
 ---
 
@@ -207,56 +220,53 @@ Base path: **`/api/`**. No authentication on these routes.
 
 There is a Django management command at `api/management/commands/run-scheduled.py`:
 
-- **What it does:** Finds tasks where `status='pending'` and `scheduled_at <= now()` and updates them to `status='running'` (bulk update). It does **not** set `started_at`.
+- **What it does:** Finds tasks where `status='pending'` and `scheduled_at <= now()` and bulk-updates them to `status='running'` with `started_at=now()`.
 - **Run (Compose):**
 
 ```bash
 docker compose exec web python manage.py run_scheduled
 ```
 
-If you want this to run periodically, you can trigger it from cron as described in `.claude/commands/run-scheduled.md`.
+For periodic dispatch, trigger from cron as described in `.claude/commands/run-scheduled.md`.
 
 ---
 
 ## 10. Prerequisites
 
-- **Docker** + **Docker Compose**, or **Python 3.11+**, **PostgreSQL**, and **Node.js** (npm) for the frontend.
+- **Docker** + **Docker Compose** — or **Python 3.11+**, **PostgreSQL**, and **Node.js** (npm) if running locally without containers.
 
 ---
 
 ## 11. Environment variables
 
-There is **no** committed `.env.example`. Required for `config/settings.py` and Compose (`env_file: .env`):
+Required for `config/settings.py` and Docker Compose (`env_file: .env`). There is no committed `.env.example` — create `.env` at the repo root and never commit it.
 
 | Variable | Purpose |
 |----------|---------|
-| `DJANGO_SECRET_KEY` | Django secret |
-| `DJANGO_DEBUG` | Boolean; default `False` if unset |
-| `POSTGRES_DB` | Database name (also Postgres container) |
+| `DJANGO_SECRET_KEY` | Django secret key |
+| `DJANGO_DEBUG` | Boolean; defaults to `False` if unset |
+| `POSTGRES_DB` | Database name (also used by the Postgres container) |
 | `POSTGRES_USER` | DB user |
 | `POSTGRES_PASSWORD` | DB password |
-| `DB_HOST` | Host (e.g. `db` in Compose) |
-| `DB_PORT` | Port |
-
-Create `.env` at the repo root; do not commit secrets.
+| `DB_HOST` | Host — use `db` in Compose |
+| `DB_PORT` | Port — typically `5432` |
 
 ---
 
 ## 12. Installation and migrations
 
+**Backend (local):**
 ```bash
 pip install -r requirements.txt
 python manage.py migrate
 ```
 
-Compose:
-
+**Backend (Compose):**
 ```bash
 docker compose exec web python manage.py migrate
 ```
 
-Frontend:
-
+**Frontend:**
 ```bash
 cd frontend && npm install
 ```
@@ -271,39 +281,58 @@ cd frontend && npm install
 docker compose up --build
 ```
 
-API: `http://localhost:8000` (Compose overrides image CMD with `runserver 0.0.0.0:8000`).
+API available at `http://localhost:8000` (Compose overrides the image CMD with `runserver 0.0.0.0:8000` for development).
 
-**API locally (no Docker):** set env vars, `migrate`, `python manage.py runserver`.
+**API locally (no Docker):** set env vars, run `migrate`, then `python manage.py runserver`.
 
 **Frontend dev:**
 
 ```bash
-cd frontend && npm run dev
+cd frontend && npm run dev   # http://localhost:3000
 ```
 
-→ `http://localhost:3000` — use `/tasks`, `/create`.
+Navigate to `/tasks` or `/create`. The root `/` is the stock Next.js template.
 
-**Production frontend:** `npm run build` && `npm run start`.
+**Production frontend:**
+```bash
+npm run build && npm run start
+```
 
-**Image default:** `dockerfile` **CMD** is Gunicorn on `config.wsgi:application`; Compose uses `runserver` for development.
+**Image default:** `dockerfile` CMD is Gunicorn on `config.wsgi:application`; Compose uses `runserver` for development.
 
-**Docker filename:** `dockerfile` is lowercase; some tools expect `Dockerfile` — rename or set `dockerfile:` under `build` in Compose if needed.
+**Docker filename note:** the Dockerfile is named `dockerfile` (lowercase). Some tools expect `Dockerfile` with a capital D — rename it or set `dockerfile: dockerfile` explicitly under the `build` key in Compose if you encounter issues.
 
 ---
 
 ## 14. Quick API checks (curl)
 
 ```bash
+# List all tasks
 curl http://localhost:8000/api/tasks/
+
+# Create a task
 curl -X POST http://localhost:8000/api/tasks/create/ \
   -H "Content-Type: application/json" \
   -d '{"name":"Test","tool_name":"test_tool","user_id":1,"priority":"high"}'
+
+# Bulk create
+curl -X POST http://localhost:8000/api/tasks/bulk-create/ \
+  -H "Content-Type: application/json" \
+  -d '[{"name":"Job A","tool_name":"tool_a","user_id":1},{"name":"Job B","tool_name":"tool_b","user_id":2}]'
+
+# Peek at the next runnable task
 curl http://localhost:8000/api/tasks/next/
+
+# List scheduled (future) tasks
 curl http://localhost:8000/api/tasks/scheduled/
+
+# Update status (also sets started_at / completed_at automatically)
+curl -X PATCH http://localhost:8000/api/tasks/1/status/ \
+  -H "Content-Type: application/json" \
+  -d '{"status":"running"}'
 ```
 
-Compose logs:
-
+**Compose logs:**
 ```bash
 docker compose logs web --tail=50
 ```
@@ -312,113 +341,102 @@ docker compose logs web --tail=50
 
 ## 15. Authentication and security
 
-- Task API views do **not** enforce login or tokens.
-- `ALLOWED_HOSTS = []` — configure before any real deployment.
-- CORS allows all origins. Treat as **trusted-network / dev** unless you harden.
+- Task API views do **not** enforce login or tokens — all endpoints are open.
+- `ALLOWED_HOSTS = []` — must be configured before any real deployment.
+- `CORS_ALLOW_ALL_ORIGINS = True` — permissive; acceptable for dev, must be locked down for production.
+- ⚠️ **The committed `.mcp.json` contains what appears to be a real Postman API key** — treat it as compromised, rotate it immediately, and remove secrets from version control.
 
 ---
 
 ## 16. MCP (Model Context Protocol)
 
-This repo contains two different MCP-related configuration/implementation artifacts:
+**`mcp_server/server.py`** — a Python MCP stdio server named `"publive-tasks"` that exposes four tools:
 
-- **`mcp_server/server.py`**: a Python MCP stdio server named `"publive-tasks"` that exposes tools:
-  - `list_tasks` (calls `GET /api/tasks/` with optional params)
-  - `create_task` (calls `POST /api/tasks/create/`)
-  - `next_task` (calls `GET /api/tasks/next/`)
-  - `update_status` (calls `PATCH /api/tasks/<id>/status/`)
+- `list_tasks` — calls `GET /api/tasks/` with optional params
+- `create_task` — calls `POST /api/tasks/create/`
+- `next_task` — calls `GET /api/tasks/next/`
+- `update_status` — calls `PATCH /api/tasks/<id>/status/`
 
-It talks to the backend at `API = "http://localhost:8000/api"` and expects the Django API to be running.
+It expects the Django API to be running at `http://localhost:8000/api`. The `mcp` and `httpx` packages it requires are **not** in `requirements.txt` — install them separately.
 
-- **`.mcp.json` / `.mcp.json.example`**: example MCP client/server configuration (for common servers like postgres/filesystem/fetch/git/rest-api/postman).
-
-**Important security note:** the committed `.mcp.json` in this repo currently contains what looks like a **real Postman API key**. Treat it as compromised: rotate it and remove secrets from version control.
+**`.mcp.json` / `.mcp.json.example`** — MCP client configuration files for common servers (postgres, filesystem, fetch, git, rest-api, postman). The committed `.mcp.json` currently contains a real API key (see §15).
 
 ---
 
 ## 17. Testing and CI
 
-- **`api/tests.py`:** empty — no Django tests.
-- **Frontend:** `npm run lint` only; no `test` script in `package.json`.
-- **CI:** no `.github/workflows` (or similar) in-repo.
+- **`api/tests.py`:** empty — no Django tests exist yet.
+- **Frontend:** `npm run lint` only; there is no `test` script in `package.json`.
+- **CI:** no `.github/workflows` or equivalent configured.
 
 ---
 
 ## 18. Claude Code / `.claude`
 
-Project-level Claude Code material:
+Project-level Claude Code configuration and reference material:
 
 - **`CLAUDE.md` (root):** commands, architecture summary, queue/frontend behavior.
-- **`.claude/context/`:** `api-schema.md`, `db-schema.md` — short references; they may be **older** than the live model (e.g. missing priority / scheduling fields) — **trust the code and this readme first**.
-- **`.claude/context/domain-glossary.md`**: terminology used in this project (task/worker/claim/dispatch/queue/tool).
-- **`.claude/context/queue-logic.md`** and **`.claude/context/frontend-components.md`**: quick pointers to where queue logic and UI pieces live.
-- **`.claude/commands/`:** small how-tos (`migrate.md`, `logs.md`, `test-api.md`, `seed-tasks.md`, `run-scheduled.md`) and design notes for a future `claim` endpoint (`claim-task.md`).
-- **`.claude/prompts/add-endpoints.md`:** checklist for adding endpoints (model → migration → serializer → view → urls → `lib/api.js`).
-- **`.claude/prompts/file-ops.md`**: reminders for keeping context docs updated + export/backup snippets.
-- **`.claude/skills/`:** `bulk-import-skill.md` and `task-worker-skill.md` (high-level workflows, not executable code).
-- **`.claude/MCP-config.json`**: example MCP server definitions (fetch/filesystem/postgres) for local development.
-- **`.claude/settings.local.json`**: local toggles (e.g. disables MCP servers defined in `.mcp.json`).
+- **`.claude/context/`:** `api-schema.md`, `db-schema.md`, `domain-glossary.md`, `queue-logic.md`, `frontend-components.md` — short references. Some may be **older** than the live model (e.g. `db-schema.md` is missing the `priority`, `scheduled_at`, `started_at`, `completed_at` fields) — **trust the code and this README first**.
+- **`.claude/commands/`:** operational how-tos (`migrate.md`, `logs.md`, `test-api.md`, `seed-tasks.md`, `run-scheduled.md`) and a design sketch for a future `claim` endpoint (`claim-task.md`).
+- **`.claude/prompts/add-endpoints.md`:** checklist for adding new endpoints (model → migration → serializer → view → urls → `lib/api.js` → context docs → tests → curl).
+- **`.claude/skills/`:** `bulk-import-skill.md` and `task-worker-skill.md` — high-level workflow playbooks.
+- **`.claude/MCP-config.json`:** example MCP server definitions for local development.
+- **`.claude/settings.local.json`:** local toggles (disables MCP servers defined in `.mcp.json`).
 
 ---
 
-## 19. AI agents used in this project (what they do)
+## 19. AI agents used in this project
 
-This repository includes **AI-agent configuration and playbooks** intended to help humans build and operate the system. These agents are **development-time helpers** (for coding, debugging, and operations) and are **not required at runtime** for the Django/Next.js app to function.
+This repository includes **AI-agent configuration and playbooks** to help humans build and operate the system. These are **development-time helpers** and are **not required at runtime** for the Django/Next.js app to function.
 
-### Repo-provided agent(s)
+**Developer agent (Claude Code / Cursor):** configured via `CLAUDE.md` + `.claude/`. Used for understanding architecture, adding endpoints safely, debugging the task lifecycle and queue behavior, and running operational snippets (migrations, logs, seeding, scheduled dispatch).
 
-- **Cursor / Claude Code agent (developer tooling)**:
-  - **Where configured**: `CLAUDE.md` + `.claude/` (prompts, commands, skills, context).
-  - **What it’s used for**:
-    - Understanding architecture and conventions (what files own what).
-    - Adding endpoints safely (model → migration → serializer → view → url → frontend API → curl test).
-    - Debugging the task lifecycle and queue behavior.
-    - Operational snippets (migrations, logs, seeding tasks, dispatching scheduled tasks).
+**Agent skills (`.claude/skills/`):**
 
-### “Skills” (agent playbooks)
+- `bulk-import-skill.md` — import tasks from CSV by converting rows to JSON and calling `POST /api/tasks/bulk-create/`, with per-row error handling.
+- `task-worker-skill.md` — implement a polling worker loop that calls `GET /api/tasks/next/` and then patches status to `completed`/`failed`.
 
-These are **instructions** for an agent (or a human) to follow:
+**MCP integration (`mcp_server/server.py`):** exposes the Django task API as MCP tools so any MCP-capable client or agent can interact with tasks. This is an integration adapter, not a background worker.
 
-- **`bulk-import-skill.md`**: How to import tasks from CSV by converting rows to JSON and calling `POST /api/tasks/bulk-create/`, handling per-row errors.
-- **`task-worker-skill.md`**: How to implement a basic worker loop that polls `GET /api/tasks/next/` and then patches status to `completed`/`failed`.
-
-### MCP-related “agents”
-
-- **MCP stdio server (`mcp_server/server.py`)**:
-  - Exposes the Django task API as MCP tools (`list_tasks`, `create_task`, `next_task`, `update_status`) by making HTTP requests to `http://localhost:8000/api`.
-  - This is an **integration adapter** so an MCP-capable client/agent can interact with tasks.
-
-- **MCP client/server config (`.mcp.json`, `.mcp.json.example`, `.claude/MCP-config.json`)**:
-  - Defines which MCP servers a client can start (filesystem/fetch/postgres/rest-api/postman, etc.).
-  - **Security**: do not commit API keys or DB URLs with passwords.
-
-### What these agents did “in this project”
-
-- They **document and automate developer workflows** (how to migrate, seed, debug queue flow, add endpoints).
-- They provide **runbooks** for building a worker and for bulk importing tasks.
-- They provide **MCP connectivity** so external AI agents/clients can call the task API through MCP tools.
-
-If you want the app to be “agent-driven” at runtime (e.g. a worker that claims tasks atomically via a `/claim/` endpoint), that’s a next step in the codebase—not something the `.claude/` files do by themselves.
+If you want agent-driven runtime behavior (e.g. a worker atomically claiming tasks via a `/claim/` endpoint), that is a next step in the codebase — the `.claude/` files provide the design sketch in `claim-task.md`.
 
 ---
 
 ## 20. Deployment notes
 
-- **Docker image:** installs `requirements.txt`, exposes `8000`, runs Gunicorn.
-- **Compose file:** dev-oriented bind mount + `runserver`.
+- Docker image installs `requirements.txt`, exposes port `8000`, and runs Gunicorn.
+- Compose file is dev-oriented: bind mount for live code reload + `runserver` override.
+- No `.dockerignore` — the bind mount copies everything (node_modules, `__pycache__`, etc.) into the container on build. Add a `.dockerignore` before any production image build.
+- `requirements.txt` has no version pins — add pinned versions before deploying to prevent unexpected breakage on reinstall.
 
 ---
 
-## 21. Known gaps / TODOs
+## 21. Bug fixes applied and remaining TODOs
 
-- No `claim` HTTP route for `claim_task()`.
-- `update_task_status` does not set `completed_at` / `started_at`.
-- `GET /api/tasks/next/` returns `204` with a JSON body — uncommon; clients should key off status code.
-- `.claude/context/*.md` may not list all current fields.
-- Root **`readme.md`** vs **`README.md`:** on case-insensitive filesystems they are the same file; use one canonical name in docs.
+### Bug fixes applied in this commit
+
+- **`POST /api/tasks/create/` now returns `400` on validation error** (previously defaulted to `200`). It also now returns `201 Created` on success, matching REST conventions.
+- **`run_scheduled` management command now sets `started_at`** in the same bulk update that flips `status` to `running`. Previously `started_at` was left `null` for scheduler-dispatched tasks.
+- **Variable shadowing in `get_tasks` removed** — the local query-param variable was renamed from `status` to `status_filter` to stop shadowing `rest_framework.status`.
+- **`GET /api/tasks/next/` now returns `200` with `{"detail": "...", "task": null}` when the queue is empty** instead of `204 No Content` with a JSON body (which many HTTP clients silently discard).
+- **New endpoint `POST /api/tasks/<task_id>/claim/`** — exposes `claim_task()` over HTTP so external workers can claim tasks with row-level locking. Returns `200` on success, `409 Conflict` if the task is no longer claimable.
+- **`update_task_status` no longer overwrites `started_at`** on repeat transitions into `running` — it only sets the timestamp if it is currently `null`, so re-entering `running` doesn't reset the clock.
+- **Frontend `lib/api.js` rewritten**: API base URL is now read from `NEXT_PUBLIC_API_URL` (falls back to `http://localhost:8000/api`), all calls go through a shared `request()` helper that throws an `Error` (with `.status` and `.body`) on non-2xx or network failures, and new helpers `claimTask`, `getNextTask`, and `getScheduledTasks` are exported.
+
+### Remaining TODOs (not in scope for this fix)
+
+- **No pagination on `/tasks`** — the frontend still loads all tasks in a single fetch. Add server-side pagination before the table grows.
+- **Dead CSS** — `.card.running`, `.card.completed`, `.card.failed` rules in `globals.css` are never applied (cards only receive `className="card"`). Either apply a status class in the task list component or remove the unused rules.
+- **`.claude/context/db-schema.md` is stale** — missing the `priority`, `scheduled_at`, `started_at`, and `completed_at` fields. Trust the code.
+- **MCP server dependencies missing from `requirements.txt`** — `mcp` and `httpx` must be installed separately to run `mcp_server/server.py`.
+- **Requirements are unpinned** — add explicit version constraints in `requirements.txt` before any production build.
+- **Lowercase `dockerfile`** — rename to `Dockerfile` or set `dockerfile: dockerfile` explicitly in `docker-compose.yml` for tooling that is case-sensitive.
+- **No tests** — `api/tests.py` is empty; there is no frontend test suite. Add unit tests for `api/queue.py` (priority ordering, scheduled filtering, atomic claim) and integration tests for the views.
+- **Open CORS + empty `ALLOWED_HOSTS`** — lock both down before any real deployment.
+- **Secret in `.mcp.json`** — rotate the committed Postman API key and move secrets to `.env`.
 
 ---
 
 ## Screenshots
 
-Under `Images/` (e.g. `get_tasks_localhost_8000.png`, `get_tasks_next.png`, `api_task_status.png`, `get_tasks_status.png`).
+Under `Images/` — e.g. `get_tasks_localhost_8000.png`, `get_tasks_next.png`, `api_task_status.png`, `get_tasks_status.png`.
