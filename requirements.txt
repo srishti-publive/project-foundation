@@ -6,3 +6,4 @@ django-environ
 django-cors-headers
 httpx
 mcp
+croniter

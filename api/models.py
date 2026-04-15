@@ -43,6 +43,29 @@ class Task(models.Model):
     started_at = models.DateTimeField(blank=True, null=True)
     completed_at = models.DateTimeField(blank=True, null=True)
 
+    # --- Recurrence fields ---------------------------------------------------
+    # A cron expression ("*/5 * * * *") or ISO 8601 interval ("R/PT1H").
+    # Null means the task does not recur.
+    recurrence_rule = models.CharField(max_length=200, blank=True, null=True)
+
+    # Points to the task that spawned this one.  SET_NULL means children
+    # become orphans if the parent is deleted — they still run normally.
+    recurrence_parent = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="children",
+    )
+
+    # Maximum number of child tasks to spawn (null = unlimited).
+    # 0 is treated the same as having no rule — no children are ever created.
+    max_recurrences = models.IntegerField(null=True, blank=True)
+
+    # How many ancestors this task has in its recurrence chain.
+    # The root task starts at 0; each spawned child is parent.recurrence_count + 1.
+    recurrence_count = models.IntegerField(default=0)
+
     def __str__(self):
         return f"{self.task_id} - {self.name}"
 

@@ -130,6 +130,37 @@ def create_webhook_subscription(request):
     )
 
 
+@api_view(["GET"])
+def task_children(request, task_id):
+    """
+    List all direct recurrence children of a task.
+
+    Children are tasks whose recurrence_parent_id matches task_id.  If the
+    parent task does not exist, returns 404.
+    """
+    get_object_or_404(Task, task_id=task_id)
+    children = Task.objects.filter(recurrence_parent_id=task_id).order_by("scheduled_at")
+    return Response(TaskSerializer(children, many=True).data)
+
+
+@api_view(["POST"])
+def cancel_recurrence(request, task_id):
+    """
+    Stop future recurrence spawns for a task.
+
+    Sets max_recurrences = recurrence_count, which makes the spawn guard
+    evaluate ``recurrence_count >= max_recurrences`` as True on this task,
+    preventing any further children.
+
+    Call this on the most recent pending child in the chain to stop the
+    chain cleanly after it runs.
+    """
+    task = get_object_or_404(Task, task_id=task_id)
+    task.max_recurrences = task.recurrence_count
+    task.save(update_fields=["max_recurrences"])
+    return Response(TaskSerializer(task).data)
+
+
 @api_view(["POST"])
 def bulk_create_tasks(request):
     """
