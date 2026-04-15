@@ -1,0 +1,74 @@
+{
+    "mcpServers": {
+      "postgres": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-postgres",
+          "postgresql://postgres:yourpassword@localhost:5432/your-database-name"
+        ]
+      },
+      "filesystem": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-filesystem",
+          "/absolute/path/to/your/project"
+        ]
+      },
+      "fetch": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-fetch"
+        ]
+      },
+      "git": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-git",
+          "--repository",
+          "/absolute/path/to/your/project"
+        ]
+      },
+      "mcp-python-hdresearch": {
+        "command": "uv",
+        "args": [
+          "tool",
+          "run",
+          "mcp-python"
+        ]
+      },
+      "mcp-python-interpreter": {
+        "command": "uvx",
+        "args": [
+          "mcp-python-interpreter"
+        ]
+      },
+      "docker": {
+        "command": "uvx",
+        "args": [
+          "mcp-server-docker"
+        ]
+      },
+      "rest-api": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "mcp-rest-api",
+          "--base-url",
+          "http://localhost:8000"
+        ]
+      },
+      "postman": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@postman/mcp-server",
+          "--api-key",
+          "postnam-api-key"
+        ]
+      }
+    }
+  }

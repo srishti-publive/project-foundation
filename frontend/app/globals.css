@@ -1,95 +1,244 @@
-@import "tailwindcss";
-
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
-}
-
-
-/* Page background */
-body {
-  font-family: Arial, sans-serif;
-  background: #f1f5f9;
+/* ─── Reset & base ─── */
+* {
+  box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
-/* Center page vertically + horizontally */
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: #f5f3ef;
+  color: #1a1916;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* ─── Layout ─── */
 .wrapper {
   min-height: 100vh;
   display: flex;
   justify-content: center;
-  align-items: center;
+  align-items: flex-start;
+  padding: 48px 16px;
 }
 
-/* Main container */
 .container {
-  width: 500px;
-  background: white;
-  padding: 30px;
-  border-radius: 12px;
-  border: 2px solid #e2e8f0;
-  box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+  width: 580px;
+  max-width: 100%;
+  background: #fff;
+  padding: 36px 32px;
+  border-radius: 4px;
+  border: 1px solid #e3ded6;
 }
 
-/* Page title */
+/* ─── Title ─── */
 .title {
-  text-align: center;
-  font-size: 26px;
-  margin-bottom: 20px;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+  margin: 0 0 28px;
+  color: #1a1916;
 }
 
-/* Task card */
+/* ─── Filters ─── */
+.filters {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.filters button {
+  padding: 5px 12px;
+  border-radius: 3px;
+  border: 1px solid #d5cfc6;
+  background: transparent;
+  color: #6b6560;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.filters button:hover {
+  background: #f0ece6;
+  border-color: #bfb8ae;
+  color: #1a1916;
+}
+
+.filters button.active {
+  background: #1a1916;
+  border-color: #1a1916;
+  color: #fff;
+}
+
+/* ─── Task card ─── */
 .card {
-  border: 1px solid #cbd5e1;
-  padding: 12px;
-  border-radius: 8px;
+  border-left: 3px solid #d5cfc6;
+  padding: 14px 16px;
   margin-bottom: 10px;
-  background: #f8fafc;
+  background: #faf9f7;
+  border-radius: 0 4px 4px 0;
+  border-top: 1px solid #ede9e3;
+  border-right: 1px solid #ede9e3;
+  border-bottom: 1px solid #ede9e3;
 }
 
-/* Input fields */
+.card.running   { border-left-color: #c07c2a; }
+.card.completed { border-left-color: #4a7c49; }
+.card.failed    { border-left-color: #9e3b3b; }
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+
+.card-title {
+  font-weight: 500;
+  font-size: 14px;
+  color: #1a1916;
+}
+
+/* ─── Status badges ─── */
+.status {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 2px 8px;
+  border-radius: 2px;
+}
+
+.status.pending   { background: #f0ece6; color: #7a7068; }
+.status.running   { background: #fdf0e0; color: #a06820; }
+.status.completed { background: #eaf3e8; color: #3d6b3c; }
+.status.failed    { background: #fdeaea; color: #8b3030; }
+
+/* ─── Card action buttons ─── */
+.card-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.card-actions button {
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 3px;
+  border: 1px solid #d5cfc6;
+  background: transparent;
+  color: #6b6560;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s, color 0.15s;
+}
+
+.card-actions button:hover       { background: #f0ece6; color: #1a1916; }
+
+.card-actions .btn-start         { border-color: #c07c2a; color: #a06820; }
+.card-actions .btn-start:hover   { background: #fdf0e0; }
+
+.card-actions .btn-complete         { border-color: #4a7c49; color: #3d6b3c; }
+.card-actions .btn-complete:hover   { background: #eaf3e8; }
+
+.card-actions .btn-fail         { border-color: #9e3b3b; color: #8b3030; }
+.card-actions .btn-fail:hover   { background: #fdeaea; }
+
+/* ─── Divider ─── */
+.divider {
+  border: none;
+  border-top: 1px solid #ede9e3;
+  margin: 24px 0;
+}
+
+/* ─── Form ─── */
+.form-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: #7a7068;
+  letter-spacing: 0.2px;
+  margin-bottom: 5px;
+  text-transform: uppercase;
+}
+
 .input {
   width: 100%;
-  padding: 10px;
-  margin-bottom: 12px;
-  border-radius: 6px;
-  border: 1px solid #cbd5e1;
+  padding: 9px 11px;
+  margin-bottom: 14px;
+  border-radius: 3px;
+  border: 1px solid #d5cfc6;
   font-size: 14px;
+  font-family: inherit;
+  background: #faf9f7;
+  color: #1a1916;
+  transition: border-color 0.15s, background 0.15s;
+  outline: none;
 }
 
-/* Button */
-.button {
+.input:focus {
+  border-color: #a09890;
+  background: #fff;
+}
+
+/* ─── Select input ─── */
+.select {
   width: 100%;
-  padding: 10px;
-  background: #cbd5e1;
-  color: white;
-  border-radius: 6px;
-  border: none;
-  font-size: 15px;
+  padding: 9px 11px;
+  margin-bottom: 14px;
+  border-radius: 3px;
+  border: 1px solid #d5cfc6;
+  font-size: 14px;
+  font-family: inherit;
+  background: #faf9f7;
+  color: #1a1916;
   cursor: pointer;
+  appearance: auto;
+  outline: none;
+  transition: border-color 0.15s, background 0.15s;
 }
 
-.button:hover {
-  background: #cbd5e1;
+.select:focus {
+  border-color: #a09890;
+  background: #fff;
+}
+
+/* ─── Priority badges ─── */
+.priority {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 2px 8px;
+  border-radius: 2px;
+}
+
+.priority.high   { background: #fdeaea; color: #8b3030; }
+.priority.medium { background: #fdf0e0; color: #a06820; }
+.priority.low    { background: #eaf3e8; color: #3d6b3c; }
+
+/* ─── Stacked filter rows ─── */
+.filter-group {
+  margin-bottom: 24px;
+}
+
+.filter-group .filters {
+  margin-bottom: 8px;
+}
+
+.filter-group .filters:last-child {
+  margin-bottom: 0;
+}
+
+.filter-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: #a09890;
+  align-self: center;
+  min-width: 58px;
 }

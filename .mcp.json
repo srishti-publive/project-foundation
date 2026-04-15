@@ -1,0 +1,70 @@
+{
+    "mcpServers": {
+      "postgres": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-postgres",
+          "postgresql://postgres:yourpassword@localhost:5432/mcpdb"
+        ]
+      },
+      "filesystem": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-filesystem",
+          "/Users/air/publive_mcp"
+        ]
+      },
+      "fetch": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-fetch"
+        ]
+      },
+      "git": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-git",
+          "--repository",
+          "/absolute/path/to/your/project"
+        ]
+      },
+      "mcp-python-hdresearch": {
+        "command": "uv",
+        "args": [
+          "tool",
+          "run",
+          "mcp-python"
+        ]
+      },
+"mcp-python-interpreter": {
+  "command": "uv",
+  "args": ["tool", "run", "mcp-python-interpreter"]
+},
+"docker": {
+  "command": "uv",
+  "args": ["tool", "run", "mcp-server-docker"]
+},
+      "rest-api": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "mcp-rest-api",
+          "--base-url",
+          "http://localhost:8000"
+        ]
+      },
+      "postman": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@postman/mcp-server",
+          "--api-key",
+          "${POSTMAN_API_KEY}"
+        ]
+      }
+    }
+  }

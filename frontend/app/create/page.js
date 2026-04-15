@@ -8,6 +8,8 @@ export default function CreateTask() {
   const [name, setName] = useState("")
   const [tool, setTool] = useState("")
   const [user, setUser] = useState("")
+  const [priority, setPriority] = useState("medium")
+  const [scheduledAt, setScheduledAt] = useState("")
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -16,6 +18,8 @@ export default function CreateTask() {
       name,
       tool_name: tool,
       user_id: Number(user),
+      priority,
+      ...(scheduledAt ? { scheduled_at: scheduledAt } : {}),
     })
 
     alert("Task created")
@@ -46,6 +50,30 @@ export default function CreateTask() {
             placeholder="User ID"
             value={user}
             onChange={(e) => setUser(e.target.value)}
+          />
+
+          <label className="form-label">Priority</label>
+          <select
+            className="select"
+            value={priority}
+            onChange={(e) => setPriority(e.target.value)}
+          >
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+          </select>
+
+          <label className="form-label">
+            Scheduled At{" "}
+            <span style={{ fontWeight: 400, textTransform: "none", color: "#b0a898" }}>
+              (optional)
+            </span>
+          </label>
+          <input
+            type="datetime-local"
+            className="input"
+            value={scheduledAt}
+            onChange={(e) => setScheduledAt(e.target.value)}
           />
 
           <button className="button">Create Task</button>

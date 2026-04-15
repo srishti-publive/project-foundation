@@ -1,6 +1,5 @@
 from django.db import models
 
-from django.db import models
 
 class Task(models.Model):
 
@@ -9,6 +8,12 @@ class Task(models.Model):
         ("running", "Running"),
         ("completed", "Completed"),
         ("failed", "Failed"),
+    ]
+
+    PRIORITY_CHOICES = [
+        ("low", "Low"),
+        ("medium", "Medium"),
+        ("high", "High"),
     ]
 
     task_id = models.AutoField(primary_key=True)
@@ -25,7 +30,16 @@ class Task(models.Model):
         default="pending"
     )
 
+    priority = models.CharField(
+        max_length=10,
+        choices=PRIORITY_CHOICES,
+        default="medium"
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
+    scheduled_at = models.DateTimeField(blank=True, null=True)
+    started_at = models.DateTimeField(blank=True, null=True)
+    completed_at = models.DateTimeField(blank=True, null=True)
 
     def __str__(self):
         return f"{self.task_id} - {self.name}"
