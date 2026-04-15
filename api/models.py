@@ -1,3 +1,5 @@
+import secrets
+
 from django.db import models
 
 
@@ -43,3 +45,27 @@ class Task(models.Model):
 
     def __str__(self):
         return f"{self.task_id} - {self.name}"
+
+
+class WebhookSubscription(models.Model):
+    """
+    Maps a user_id to a URL that should receive signed POST payloads
+    whenever one of that user's tasks changes status.
+
+    The ``secret`` is auto-generated on first save (64-char hex = 256-bit
+    entropy) and is only returned to the caller at creation time.
+    """
+
+    user_id = models.IntegerField(db_index=True)
+    url = models.URLField(max_length=2000)
+    # 64 hex chars = 32 random bytes = 256-bit secret; never editable via API.
+    secret = models.CharField(max_length=64, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def save(self, *args, **kwargs):
+        if not self.secret:
+            self.secret = secrets.token_hex(32)
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"WebhookSubscription(user_id={self.user_id}, url={self.url})"

@@ -4,9 +4,11 @@ from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
+from .hooks import notify
 from .models import Task
 from .queue import claim_task, get_next_task
-from .serializers import TaskSerializer
+from .serializers import TaskSerializer, WebhookSubscriptionSerializer
+from .webhooks import validate_url
 
 
 # GET all tasks
@@ -46,12 +48,15 @@ def update_task_status(request, task_id):
     if new_status not in dict(Task.STATUS_CHOICES):
         return Response({"error": "Invalid status"}, status=status.HTTP_400_BAD_REQUEST)
 
+    old_status = task.status
     task.status = new_status
     if new_status == "running" and task.started_at is None:
         task.started_at = timezone.now()
     elif new_status in ("completed", "failed"):
         task.completed_at = timezone.now()
     task.save()
+
+    notify(old_status, new_status, task)
 
     serializer = TaskSerializer(task)
     return Response(serializer.data)
@@ -87,7 +92,42 @@ def claim_next_task(request, task_id):
             {"error": "Task is not claimable (already claimed, completed, or missing)."},
             status=status.HTTP_409_CONFLICT,
         )
+
+    notify("pending", "running", task)
+
     return Response(TaskSerializer(task).data)
+
+
+@api_view(["POST"])
+def create_webhook_subscription(request):
+    """
+    Register a URL to receive signed webhook POSTs for a given user_id.
+
+    The ``secret`` is returned **once** in this response and never again.
+    Store it immediately — it is needed to verify ``X-Webhook-Signature``
+    on incoming deliveries.
+    """
+    serializer = WebhookSubscriptionSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    url = serializer.validated_data["url"]
+    error = validate_url(url)
+    if error:
+        return Response({"url": [error]}, status=status.HTTP_400_BAD_REQUEST)
+
+    sub = serializer.save()
+
+    return Response(
+        {
+            "id": sub.id,
+            "user_id": sub.user_id,
+            "url": sub.url,
+            "secret": sub.secret,
+            "created_at": sub.created_at,
+        },
+        status=status.HTTP_201_CREATED,
+    )
 
 
 @api_view(["POST"])

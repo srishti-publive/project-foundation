@@ -131,3 +131,9 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+
+# Webhook delivery
+# Comma-separated list of hostnames that webhook subscriptions may target.
+# Empty (the default) means no host restrictions — suitable for local dev.
+# Example: WEBHOOK_ALLOWED_HOSTS=hooks.example.com,webhook.site
+WEBHOOK_ALLOWED_HOSTS = env.list("WEBHOOK_ALLOWED_HOSTS", default=[])
